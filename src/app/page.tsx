@@ -7,7 +7,7 @@ import CustomIcon from "./components/CustomIcon";
 import { SoundEffect } from "./components/SoundCard";
 import Link from "next/link";
 import { builtInSoundEffects } from "./data/soundEffects";
-import { fetchSoundEffects, fetchCategories } from '../lib/soundEffectsService';
+import { fetchSoundEffects, fetchCategories } from "../lib/soundEffectsService";
 import SearchBar from "./components/SearchBar";
 import { searchSoundEffects } from "../lib/searchUtils";
 
@@ -40,21 +40,23 @@ export default function Home() {
   const filteredSounds = useMemo(() => {
     // First filter by favorites if needed
     let soundsToSearch = allSoundEffects;
-    
+
     if (showFavoritesOnly) {
-      soundsToSearch = allSoundEffects.filter(sound => 
+      soundsToSearch = allSoundEffects.filter((sound) =>
         favorites.includes(sound.id)
       );
     }
-    
+
     // Then apply search filters
-    return searchSoundEffects(
-      soundsToSearch,
-      searchTerm,
-      filter,
-      exactMatch
-    );
-  }, [allSoundEffects, searchTerm, filter, favorites, showFavoritesOnly, exactMatch]);
+    return searchSoundEffects(soundsToSearch, searchTerm, filter, exactMatch);
+  }, [
+    allSoundEffects,
+    searchTerm,
+    filter,
+    favorites,
+    showFavoritesOnly,
+    exactMatch,
+  ]);
 
   useEffect(() => {
     // Load saved favorites
@@ -66,13 +68,15 @@ export default function Home() {
     // Load sound effects and categories
     const loadSoundEffects = async () => {
       setIsLoading(true);
-      
+
       // Create a new array with built-in sounds
       const mergedSounds = [...builtInSoundEffects];
 
       try {
         // Get custom sounds from Supabase
+        console.log("Fetching sounds from Supabase...");
         const customSounds = await fetchSoundEffects();
+        console.log("Supabase response:", customSounds);
 
         // Replace or add custom sounds
         customSounds.forEach((customSound) => {
@@ -90,10 +94,10 @@ export default function Home() {
 
         // Update the sounds state
         setAllSoundEffects(mergedSounds);
-        
+
         // Fetch categories from Supabase
         const supabaseCategories = await fetchCategories();
-        
+
         // Get categories from localStorage
         let localCategories: string[] = [];
         if (typeof window !== "undefined") {
@@ -109,12 +113,12 @@ export default function Home() {
             }
           }
         }
-        
+
         // Update categories using a callback to ensure it happens after sounds are updated
         // This will rebuild the categories automatically based on all sound effects
       } catch (error) {
         console.error("Error loading sounds from Supabase:", error);
-        
+
         // Fallback to localStorage if Supabase fails
         const customSounds = localStorage.getItem("soundEffects");
         if (customSounds) {
@@ -312,7 +316,7 @@ export default function Home() {
           <div className="loading-spinner"></div>
         </div>
       )}
-      
+
       <header className="header">
         <div className="logo-container">
           <div className="logo">
@@ -327,9 +331,9 @@ export default function Home() {
         </div>
 
         <div className="search-section">
-          <SearchBar 
-            searchTerm={searchTerm} 
-            onSearchChange={setSearchTerm} 
+          <SearchBar
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
             allSoundEffects={allSoundEffects}
             onSelectSound={handleSelectSound}
             categoryFilter={filter}
@@ -753,7 +757,7 @@ export default function Home() {
           align-items: center;
           z-index: 1000;
         }
-        
+
         .loading-spinner {
           width: 50px;
           height: 50px;
@@ -762,9 +766,11 @@ export default function Home() {
           border-radius: 50%;
           animation: spin 1s linear infinite;
         }
-        
+
         @keyframes spin {
-          to { transform: rotate(360deg); }
+          to {
+            transform: rotate(360deg);
+          }
         }
       `}</style>
     </div>
