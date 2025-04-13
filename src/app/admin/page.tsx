@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, FormEvent } from "react";
-import { ArrowLeft, Save, Trash, Move } from "react-feather";
+import { ArrowLeft, Save, Trash, Move, Download, Upload } from "react-feather";
 import Link from "next/link";
 import IconUpload from "../components/IconUpload";
 import CustomIcon, { IconType } from "../components/CustomIcon";
@@ -459,14 +459,105 @@ export default function AdminPage() {
     );
   }
 
+  const exportSoundEffects = () => {
+    // Get custom sounds from localStorage
+    const savedSounds = localStorage.getItem("soundEffects");
+    if (!savedSounds) {
+      showNotification("No custom sound effects to export");
+      return;
+    }
+
+    // Create a file to download
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(savedSounds);
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "sound-effects-export.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+    
+    showNotification("Sound effects exported successfully");
+  };
+
+  const importSoundEffects = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const fileReader = new FileReader();
+    const files = event.target.files;
+    
+    if (!files || files.length === 0) {
+      return;
+    }
+    
+    fileReader.readAsText(files[0], "UTF-8");
+    fileReader.onload = e => {
+      if (!e.target || typeof e.target.result !== 'string') {
+        showNotification("Error reading file");
+        return;
+      }
+      
+      try {
+        const content = e.target.result;
+        const importedSounds = JSON.parse(content);
+        
+        // Validate imported data
+        if (!Array.isArray(importedSounds)) {
+          throw new Error("Invalid format: expected an array");
+        }
+        
+        // Save to localStorage
+        localStorage.setItem("soundEffects", content);
+        
+        // Reload the sounds
+        const allSounds = [...builtInSoundEffects];
+        importedSounds.forEach(customSound => {
+          const existingIndex = allSounds.findIndex(s => s.id === customSound.id);
+          if (existingIndex >= 0) {
+            allSounds[existingIndex] = customSound;
+          } else {
+            allSounds.push(customSound);
+          }
+        });
+        
+        setSounds(allSounds);
+        showNotification("Sound effects imported successfully");
+      } catch (error) {
+        console.error("Import error:", error);
+        showNotification("Error importing sound effects: Invalid file format");
+      }
+      
+      // Clear the file input
+      event.target.value = '';
+    };
+    
+    fileReader.onerror = () => {
+      showNotification("Error reading file");
+    };
+  };
+
   return (
     <div className="admin-page">
       <header className="admin-header">
         <Link href="/" className="back-link">
-          <ArrowLeft size={18} />
-          <span>Back to Sound Library</span>
+          <ArrowLeft size={18} /> Back to Sound Library
         </Link>
         <h1 className="admin-title">Sound Effect Manager</h1>
+        <div className="admin-actions">
+          <button
+            className="export-button"
+            onClick={exportSoundEffects}
+            title="Export sound effects"
+          >
+            <Download size={18} /> Export
+          </button>
+          <label className="import-button" title="Import sound effects">
+            <Upload size={18} /> Import
+            <input
+              type="file"
+              accept=".json"
+              onChange={importSoundEffects}
+              style={{ display: 'none' }}
+            />
+          </label>
+        </div>
       </header>
 
       <main className="admin-content">

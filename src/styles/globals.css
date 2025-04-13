@@ -88,3 +88,58 @@ textarea::placeholder {
 .sound-detail-modal {
   background-color: var(--modal-overlay);
 }
+
+/* Admin page export/import buttons */
+.admin-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.admin-title {
+  margin: 0;
+  flex-grow: 1;
+  text-align: center;
+}
+
+.back-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  color: var(--primary-color);
+}
+
+.export-button,
+.import-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.export-button:hover,
+.import-button:hover {
+  background-color: var(--highlight-color);
+  border-color: var(--primary-color);
+}
+
+.export-button svg,
+.import-button svg {
+  color: var(--primary-color);
+}
