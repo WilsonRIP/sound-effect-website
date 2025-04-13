@@ -13,9 +13,13 @@
   max-height: 100%;
 }
 
+/* Import search styles */
+@import './search.css';
+
 /* Add variables for icon colors */
 :root {
   --primary-color: #4a6cf7;
+  --primary-rgb: 74, 108, 247; /* RGB values for primary color */
   --secondary-color: #f5a623;
   --success-color: #4caf50;
   --error-color: #f44336;
@@ -35,6 +39,14 @@
   --danger-color: #f44336;
   --modal-overlay: rgba(0, 0, 0, 0.5);
   --shadow-color: rgba(0, 0, 0, 0.1);
+  
+  /* Search component colors */
+  --text-primary: #333;
+  --text-secondary: #757575;
+  --bg-primary: #f5f7fa;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f0f0f0;
+  --bg-hover: #f0f5ff;
 }
 
 /* Dark theme variables */
@@ -50,6 +62,14 @@
   --input-bg: #2c2c2c;
   --modal-overlay: rgba(0, 0, 0, 0.7);
   --shadow-color: rgba(0, 0, 0, 0.3);
+  
+  /* Search component colors - dark theme */
+  --text-primary: #f5f5f5;
+  --text-secondary: #aaa;
+  --bg-primary: #121212;
+  --bg-secondary: #1e1e1e;
+  --bg-tertiary: #2c2c2c;
+  --bg-hover: #1a2242;
 }
 
 /* Base styles for the whole app */

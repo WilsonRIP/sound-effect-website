@@ -8,6 +8,8 @@ import { SoundEffect } from "./components/SoundCard";
 import Link from "next/link";
 import { builtInSoundEffects } from "./data/soundEffects";
 import { fetchSoundEffects, fetchCategories } from '../lib/soundEffectsService';
+import SearchBar from "./components/SearchBar";
+import { searchSoundEffects } from "../lib/searchUtils";
 
 export default function Home() {
   const [filter, setFilter] = useState("All");
@@ -22,10 +24,10 @@ export default function Home() {
   const [allSoundEffects, setAllSoundEffects] =
     useState<SoundEffect[]>(builtInSoundEffects);
   const [isLoading, setIsLoading] = useState(false);
+  const [exactMatch, setExactMatch] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const categories = useMemo(() => {
     return [
@@ -34,26 +36,25 @@ export default function Home() {
     ].filter(Boolean);
   }, [allSoundEffects]);
 
-  // Filter sounds based on category, search term, and favorites
-  const filteredSounds = allSoundEffects.filter((sound) => {
-    // Filter by category
-    if (filter !== "All" && sound.category !== filter) return false;
-
-    // Filter by search term
-    if (
-      searchTerm &&
-      !sound.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      !sound.category.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      !sound.description.toLowerCase().includes(searchTerm.toLowerCase())
-    ) {
-      return false;
+  // Use improved search functionality
+  const filteredSounds = useMemo(() => {
+    // First filter by favorites if needed
+    let soundsToSearch = allSoundEffects;
+    
+    if (showFavoritesOnly) {
+      soundsToSearch = allSoundEffects.filter(sound => 
+        favorites.includes(sound.id)
+      );
     }
-
-    // Filter by favorites if showFavoritesOnly is true
-    if (showFavoritesOnly && !favorites.includes(sound.id)) return false;
-
-    return true;
-  });
+    
+    // Then apply search filters
+    return searchSoundEffects(
+      soundsToSearch,
+      searchTerm,
+      filter,
+      exactMatch
+    );
+  }, [allSoundEffects, searchTerm, filter, favorites, showFavoritesOnly, exactMatch]);
 
   useEffect(() => {
     // Load saved favorites
@@ -188,19 +189,15 @@ export default function Home() {
 
     // Keyboard event for search
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl/Cmd + K to focus search
+      // Ctrl/Cmd + K to focus search - we'll handle this in the SearchBar component
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
         e.preventDefault();
-        searchInputRef.current?.focus();
+        // No need to manually focus, SearchBar will handle this
       }
 
-      // Escape to clear search
-      if (
-        e.key === "Escape" &&
-        document.activeElement === searchInputRef.current
-      ) {
+      // Escape to clear search - we'll handle this in the SearchBar component
+      if (e.key === "Escape") {
         setSearchTerm("");
-        searchInputRef.current?.blur();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
@@ -298,6 +295,16 @@ export default function Home() {
     setSelectedSound(null);
   };
 
+  // Add a handler for selecting a sound from search suggestions
+  const handleSelectSound = (sound: SoundEffect) => {
+    setSelectedSound(sound);
+  };
+
+  // Add handler for toggling exact match
+  const handleExactMatchChange = (isExact: boolean) => {
+    setExactMatch(isExact);
+  };
+
   return (
     <div className="container">
       {isLoading && (
@@ -319,24 +326,14 @@ export default function Home() {
           <h1>SoundFX Hub</h1>
         </div>
 
-        <div className="search-bar">
-          <Search size={16} className="search-icon" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            placeholder="Search sounds... (Ctrl+K)"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+        <div className="search-section">
+          <SearchBar 
+            searchTerm={searchTerm} 
+            onSearchChange={setSearchTerm} 
+            allSoundEffects={allSoundEffects}
+            onSelectSound={handleSelectSound}
+            categoryFilter={filter}
           />
-          {searchTerm && (
-            <button
-              className="clear-search"
-              onClick={() => setSearchTerm("")}
-              aria-label="Clear search"
-            >
-              <X size={16} />
-            </button>
-          )}
         </div>
 
         <div className="controls">
