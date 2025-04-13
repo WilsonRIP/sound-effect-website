@@ -1,12 +1,13 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Search, Heart, Bookmark, X } from "react-feather";
 import CustomIcon from "./components/CustomIcon";
 import { SoundEffect } from "./components/SoundCard";
 import Link from "next/link";
 import { builtInSoundEffects } from "./data/soundEffects";
+import { fetchSoundEffects, fetchCategories } from '../lib/soundEffectsService';
 
 export default function Home() {
   const [filter, setFilter] = useState("All");
@@ -20,15 +21,18 @@ export default function Home() {
   const [selectedSound, setSelectedSound] = useState<SoundEffect | null>(null);
   const [allSoundEffects, setAllSoundEffects] =
     useState<SoundEffect[]>(builtInSoundEffects);
+  const [isLoading, setIsLoading] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const categories = [
-    "All",
-    ...new Set(allSoundEffects.map((sound) => sound.category)),
-  ];
+  const categories = useMemo(() => {
+    return [
+      "All",
+      ...new Set(allSoundEffects.map((sound) => sound.category)),
+    ].filter(Boolean);
+  }, [allSoundEffects]);
 
   // Filter sounds based on category, search term, and favorites
   const filteredSounds = allSoundEffects.filter((sound) => {
@@ -58,34 +62,89 @@ export default function Home() {
       setFavorites(JSON.parse(savedFavorites));
     }
 
-    // Load custom sounds
-    const customSounds = localStorage.getItem("soundEffects");
-    if (customSounds) {
-      // Parse custom sounds and merge with built-in sounds
-      const parsedSounds: SoundEffect[] = JSON.parse(customSounds);
-
+    // Load sound effects and categories
+    const loadSoundEffects = async () => {
+      setIsLoading(true);
+      
       // Create a new array with built-in sounds
       const mergedSounds = [...builtInSoundEffects];
 
-      // Replace or add custom sounds
-      parsedSounds.forEach((customSound) => {
-        const existingIndex = mergedSounds.findIndex(
-          (s) => s.id === customSound.id
-        );
-        if (existingIndex >= 0) {
-          // Replace existing sound with custom version
-          mergedSounds[existingIndex] = customSound;
-        } else {
-          // Add new custom sound
-          mergedSounds.push(customSound);
-        }
-      });
+      try {
+        // Get custom sounds from Supabase
+        const customSounds = await fetchSoundEffects();
 
-      // Update the sounds state
-      setAllSoundEffects(mergedSounds);
-    } else {
-      setAllSoundEffects(builtInSoundEffects);
-    }
+        // Replace or add custom sounds
+        customSounds.forEach((customSound) => {
+          const existingIndex = mergedSounds.findIndex(
+            (s) => s.id === customSound.id
+          );
+          if (existingIndex >= 0) {
+            // Replace existing sound with custom version
+            mergedSounds[existingIndex] = customSound;
+          } else {
+            // Add new custom sound
+            mergedSounds.push(customSound);
+          }
+        });
+
+        // Update the sounds state
+        setAllSoundEffects(mergedSounds);
+        
+        // Fetch categories from Supabase
+        const supabaseCategories = await fetchCategories();
+        
+        // Get categories from localStorage
+        let localCategories: string[] = [];
+        if (typeof window !== "undefined") {
+          const savedCategories = localStorage.getItem("soundCategories");
+          if (savedCategories) {
+            try {
+              const parsedCategories = JSON.parse(savedCategories);
+              if (Array.isArray(parsedCategories)) {
+                localCategories = parsedCategories;
+              }
+            } catch (e) {
+              console.error("Error parsing saved categories:", e);
+            }
+          }
+        }
+        
+        // Update categories using a callback to ensure it happens after sounds are updated
+        // This will rebuild the categories automatically based on all sound effects
+      } catch (error) {
+        console.error("Error loading sounds from Supabase:", error);
+        
+        // Fallback to localStorage if Supabase fails
+        const customSounds = localStorage.getItem("soundEffects");
+        if (customSounds) {
+          // Parse custom sounds and merge with built-in sounds
+          const parsedSounds: SoundEffect[] = JSON.parse(customSounds);
+
+          // Replace or add custom sounds
+          parsedSounds.forEach((customSound) => {
+            const existingIndex = mergedSounds.findIndex(
+              (s) => s.id === customSound.id
+            );
+            if (existingIndex >= 0) {
+              // Replace existing sound with custom version
+              mergedSounds[existingIndex] = customSound;
+            } else {
+              // Add new custom sound
+              mergedSounds.push(customSound);
+            }
+          });
+
+          // Update the sounds state
+          setAllSoundEffects(mergedSounds);
+        } else {
+          setAllSoundEffects(builtInSoundEffects);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadSoundEffects();
 
     // Check for saved theme preference
     const savedTheme = localStorage.getItem("theme");
@@ -240,7 +299,13 @@ export default function Home() {
   };
 
   return (
-    <div className="page">
+    <div className="container">
+      {isLoading && (
+        <div className="loading-overlay">
+          <div className="loading-spinner"></div>
+        </div>
+      )}
+      
       <header className="header">
         <div className="logo-container">
           <div className="logo">
@@ -677,6 +742,32 @@ export default function Home() {
             align-items: stretch;
             gap: 1rem;
           }
+        }
+
+        .loading-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.5);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 1000;
+        }
+        
+        .loading-spinner {
+          width: 50px;
+          height: 50px;
+          border: 5px solid var(--border-color);
+          border-top-color: var(--primary-color);
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </div>

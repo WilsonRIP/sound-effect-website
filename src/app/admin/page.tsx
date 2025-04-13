@@ -23,6 +23,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { fetchSoundEffects, saveSoundEffect, deleteSoundEffect, saveSoundEffects, fetchCategories } from "../../lib/soundEffectsService";
 
 // Import the built-in sound effects
 import { builtInSoundEffects } from "../data/soundEffects";
@@ -68,6 +69,7 @@ export default function AdminPage() {
     message: "",
     isVisible: false,
   });
+  const [isLoading, setIsLoading] = useState(true);
 
   // Set up the sensors for drag and drop
   const sensors = useSensors(
@@ -87,41 +89,19 @@ export default function AdminPage() {
       applyTheme("system");
     }
 
-    // Get all built-in sounds first
-    const allSounds = [...builtInSoundEffects];
+    // Load sound effects
+    const loadSoundEffects = async () => {
+      setIsLoading(true);
+      
+      // Get all built-in sounds first
+      const allSounds = [...builtInSoundEffects];
 
-    // Get custom sounds from localStorage
-    if (typeof window !== "undefined") {
-      const savedSounds = localStorage.getItem("soundEffects");
-      if (savedSounds) {
-        const customSounds = JSON.parse(savedSounds);
+      try {
+        // Get custom sounds from Supabase
+        const customSounds = await fetchSoundEffects();
 
         // Merge custom sounds, replace built-in sounds with custom versions if they exist
-        customSounds.forEach((customSound: SoundEffect) => {
-          // Fix for SVG icons that were serialized
-          if (
-            customSound.icon &&
-            customSound.icon.type === "svg" &&
-            customSound.icon.content === "DEFAULT_SVG"
-          ) {
-            // Reconstruct the SVG element
-            customSound.icon.content = (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="10"></circle>
-                <path d="M12 8v8"></path>
-                <path d="M8 12h8"></path>
-              </svg>
-            );
-          }
-
+        customSounds.forEach((customSound) => {
           const existingIndex = allSounds.findIndex(
             (s) => s.id === customSound.id
           );
@@ -133,34 +113,122 @@ export default function AdminPage() {
             allSounds.push(customSound);
           }
         });
+
+        setSounds(allSounds);
+      } catch (error) {
+        console.error("Error loading sound effects:", error);
+        
+        // Fallback to localStorage if Supabase fails
+        if (typeof window !== "undefined") {
+          const savedSounds = localStorage.getItem("soundEffects");
+          if (savedSounds) {
+            const localCustomSounds = JSON.parse(savedSounds);
+
+            // Merge custom sounds from localStorage
+            localCustomSounds.forEach((customSound: SoundEffect) => {
+              // Fix for SVG icons that were serialized
+              if (
+                customSound.icon &&
+                customSound.icon.type === "svg" &&
+                customSound.icon.content === "DEFAULT_SVG"
+              ) {
+                // Reconstruct the SVG element
+                customSound.icon.content = (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 8v8"></path>
+                    <path d="M8 12h8"></path>
+                  </svg>
+                );
+              }
+
+              const existingIndex = allSounds.findIndex(
+                (s) => s.id === customSound.id
+              );
+              if (existingIndex >= 0) {
+                // Replace existing built-in sound with custom version
+                allSounds[existingIndex] = customSound;
+              } else {
+                // Add new custom sound
+                allSounds.push(customSound);
+              }
+            });
+
+            setSounds(allSounds);
+          } else {
+            setSounds(allSounds);
+          }
+        }
+      } finally {
+        setIsLoading(false);
       }
 
-      // Load saved categories
-      const savedCategories = localStorage.getItem("soundCategories");
-      if (savedCategories) {
-        try {
-          const parsedCategories = JSON.parse(savedCategories);
-          if (Array.isArray(parsedCategories)) {
-            setCategories(parsedCategories);
+      // Load categories from both Supabase and localStorage
+      try {
+        // Get categories from Supabase
+        const supabaseCategories = await fetchCategories();
+        
+        // Get categories from localStorage
+        let localCategories: string[] = [];
+        if (typeof window !== "undefined") {
+          const savedCategories = localStorage.getItem("soundCategories");
+          if (savedCategories) {
+            try {
+              const parsedCategories = JSON.parse(savedCategories);
+              if (Array.isArray(parsedCategories)) {
+                localCategories = parsedCategories;
+              }
+            } catch (e) {
+              console.error("Error parsing saved categories:", e);
+            }
           }
-        } catch (e) {
-          console.error("Error parsing saved categories:", e);
+        }
+        
+        // Merge categories from both sources
+        const uniqueCategories = [
+          ...new Set([
+            ...supabaseCategories,
+            ...localCategories,
+            ...builtInSoundEffects.map(sound => sound.category)
+          ])
+        ].filter(Boolean);
+        
+        setCategories(uniqueCategories);
+      } catch (error) {
+        console.error("Error loading categories:", error);
+        
+        // Fallback to localStorage
+        if (typeof window !== "undefined") {
+          const savedCategories = localStorage.getItem("soundCategories");
+          if (savedCategories) {
+            try {
+              const parsedCategories = JSON.parse(savedCategories);
+              if (Array.isArray(parsedCategories)) {
+                setCategories(parsedCategories);
+              }
+            } catch (e) {
+              console.error("Error parsing saved categories:", e);
+            }
+          } else {
+            // Extract unique categories from built-in sounds
+            const uniqueCategories = [
+              ...new Set(builtInSoundEffects.map((sound) => sound.category)),
+            ].filter(Boolean);
+            setCategories(uniqueCategories);
+          }
         }
       }
-    }
+    };
 
-    setSounds(allSounds);
-
-    // Extract unique categories from sounds if no saved categories
-    if (
-      typeof window === "undefined" ||
-      !localStorage.getItem("soundCategories")
-    ) {
-      const uniqueCategories = [
-        ...new Set(allSounds.map((sound) => sound.category)),
-      ].filter(Boolean);
-      setCategories(uniqueCategories);
-    }
+    loadSoundEffects();
   }, []);
 
   // Add the theme application function
@@ -204,7 +272,7 @@ export default function AdminPage() {
     }, 3000);
   };
 
-  const handleSaveSound = (e: FormEvent) => {
+  const handleSaveSound = async (e: FormEvent) => {
     e.preventDefault();
 
     if (!currentSound) return;
@@ -215,94 +283,128 @@ export default function AdminPage() {
       return;
     }
 
-    // Check if this is a new sound or an edit of an existing sound
-    const soundExists = sounds.some((s) => s.id === currentSound.id);
+    setIsLoading(true);
 
-    // Update the sounds array appropriately
-    let updatedSounds;
-    if (soundExists) {
-      // Update existing sound
-      updatedSounds = sounds.map((s) =>
-        s.id === currentSound.id ? currentSound : s
-      );
-    } else {
-      // Add new sound
-      updatedSounds = [...sounds, currentSound];
-    }
+    try {
+      // Save to Supabase
+      const success = await saveSoundEffect(currentSound);
 
-    setSounds(updatedSounds);
-
-    // Save only custom sounds to localStorage
-    // Get custom sounds (those that were edited from built-in or newly added)
-    const builtInIds = new Set(builtInSoundEffects.map((s) => s.id));
-    const customSounds = updatedSounds.filter((sound) => {
-      // Include sound if it's not in built-in list or if it was modified from built-in
-      const builtInVersion = builtInSoundEffects.find((s) => s.id === sound.id);
-      const isModified =
-        builtInVersion &&
-        JSON.stringify(builtInVersion) !== JSON.stringify(sound);
-      return isModified || !builtInIds.has(sound.id);
-    });
-
-    // Create a serializable version of each sound object
-    const serializableSounds = customSounds.map((sound) => {
-      const serializedSound = { ...sound };
-
-      // Handle SVG icons for localStorage (convert SVG React elements to a marker string)
-      if (
-        sound.icon &&
-        sound.icon.type === "svg" &&
-        typeof sound.icon.content !== "string"
-      ) {
-        serializedSound.icon = {
-          ...sound.icon,
-          content: "DEFAULT_SVG", // This is a marker that we'll use when reading back
-          type: "svg",
-        };
+      if (!success) {
+        throw new Error("Failed to save to Supabase");
       }
 
-      return serializedSound;
-    });
+      // Check if this is a new sound or an edit of an existing sound
+      const soundExists = sounds.some((s) => s.id === currentSound.id);
 
-    localStorage.setItem("soundEffects", JSON.stringify(serializableSounds));
+      // Update the sounds array appropriately
+      let updatedSounds;
+      if (soundExists) {
+        // Update existing sound
+        updatedSounds = sounds.map((s) =>
+          s.id === currentSound.id ? currentSound : s
+        );
+      } else {
+        // Add new sound
+        updatedSounds = [...sounds, currentSound];
+      }
 
-    // Show success notification
-    showNotification(
-      soundExists
-        ? "Sound updated successfully!"
-        : "New sound added successfully!"
-    );
-
-    // Reset form
-    setCurrentSound(null);
-  };
-
-  const handleDeleteSound = (id: number) => {
-    if (confirm("Are you sure you want to delete this sound effect?")) {
-      const updatedSounds = sounds.filter((s) => s.id !== id);
       setSounds(updatedSounds);
 
-      // Get custom sounds to update localStorage
+      // Fallback: Save to localStorage as well
+      // Get custom sounds (those that were edited from built-in or newly added)
       const builtInIds = new Set(builtInSoundEffects.map((s) => s.id));
       const customSounds = updatedSounds.filter((sound) => {
-        const builtInVersion = builtInSoundEffects.find(
-          (s) => s.id === sound.id
-        );
+        // Include sound if it's not in built-in list or if it was modified from built-in
+        const builtInVersion = builtInSoundEffects.find((s) => s.id === sound.id);
         const isModified =
           builtInVersion &&
           JSON.stringify(builtInVersion) !== JSON.stringify(sound);
         return isModified || !builtInIds.has(sound.id);
       });
 
-      localStorage.setItem("soundEffects", JSON.stringify(customSounds));
+      // Create a serializable version of each sound object
+      const serializableSounds = customSounds.map((sound) => {
+        const serializedSound = { ...sound };
 
-      if (currentSound?.id === id) {
-        setCurrentSound(null);
+        // Handle SVG icons for localStorage (convert SVG React elements to a marker string)
+        if (
+          sound.icon &&
+          sound.icon.type === "svg" &&
+          typeof sound.icon.content !== "string"
+        ) {
+          serializedSound.icon = {
+            ...sound.icon,
+            content: "DEFAULT_SVG", // This is a marker that we'll use when reading back
+            type: "svg",
+          };
+        }
+
+        return serializedSound;
+      });
+
+      localStorage.setItem("soundEffects", JSON.stringify(serializableSounds));
+
+      // Show success notification
+      showNotification(
+        soundExists
+          ? "Sound updated successfully!"
+          : "New sound added successfully!"
+      );
+
+      // Reset form
+      setCurrentSound(null);
+    } catch (error) {
+      console.error("Error saving sound:", error);
+      showNotification("Failed to save sound effect. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteSound = async (id: number) => {
+    if (confirm("Are you sure you want to delete this sound effect?")) {
+      setIsLoading(true);
+
+      try {
+        // Delete from Supabase
+        const success = await deleteSoundEffect(id);
+
+        if (!success) {
+          throw new Error("Failed to delete from Supabase");
+        }
+
+        const updatedSounds = sounds.filter((s) => s.id !== id);
+        setSounds(updatedSounds);
+
+        // Fallback: Update localStorage
+        const builtInIds = new Set(builtInSoundEffects.map((s) => s.id));
+        const customSounds = updatedSounds.filter((sound) => {
+          const builtInVersion = builtInSoundEffects.find(
+            (s) => s.id === sound.id
+          );
+          const isModified =
+            builtInVersion &&
+            JSON.stringify(builtInVersion) !== JSON.stringify(sound);
+          return isModified || !builtInIds.has(sound.id);
+        });
+
+        localStorage.setItem("soundEffects", JSON.stringify(customSounds));
+
+        if (currentSound?.id === id) {
+          setCurrentSound(null);
+        }
+
+        showNotification("Sound effect deleted successfully");
+      } catch (error) {
+        console.error("Error deleting sound:", error);
+        showNotification("Failed to delete sound effect. Please try again.");
+      } finally {
+        setIsLoading(false);
       }
     }
   };
 
-  const handleAddCategory = () => {
+  const handleAddCategory = async () => {
     if (newCategory.trim() && !categories.includes(newCategory.trim())) {
       const newCategoryValue = newCategory.trim();
       const updatedCategories = [...categories, newCategoryValue];
@@ -316,12 +418,65 @@ export default function AdminPage() {
         JSON.stringify(updatedCategories)
       );
 
-      // Update current sound with the new category
+      // Update current sound with the new category if editing
       if (currentSound) {
         setCurrentSound({
           ...currentSound,
           category: newCategoryValue,
         });
+      } else {
+        // If not currently editing a sound, create a placeholder sound with the new category
+        // This ensures the category is synced to Supabase
+        setIsLoading(true);
+        
+        try {
+          // Create a placeholder sound effect with the new category
+          const newId = sounds.length > 0 ? Math.max(...sounds.map((s) => s.id)) + 1 : 1;
+          const placeholderSound: SoundEffect = {
+            id: newId,
+            name: `${newCategoryValue} Placeholder`,
+            category: newCategoryValue,
+            description: `Placeholder for ${newCategoryValue} category`,
+            file: "/sounds/click.mp3", // Using a default sound file
+            icon: {
+              type: "svg",
+              content: (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M12 8v8"></path>
+                  <path d="M8 12h8"></path>
+                </svg>
+              ),
+              color: "#4a6cf7",
+            },
+          };
+          
+          // Save the placeholder sound to Supabase
+          const success = await saveSoundEffect(placeholderSound);
+          
+          if (success) {
+            // Add the new sound to the sounds list
+            setSounds([...sounds, placeholderSound]);
+            
+            // Show notification of success
+            showNotification(`New category '${newCategoryValue}' added and synced to Supabase`);
+          } else {
+            throw new Error("Failed to save placeholder sound");
+          }
+        } catch (error) {
+          console.error("Error creating placeholder for new category:", error);
+          showNotification("Category added locally but failed to sync to Supabase");
+        } finally {
+          setIsLoading(false);
+        }
       }
 
       // Reset form
@@ -331,9 +486,6 @@ export default function AdminPage() {
       // Highlight the category dropdown
       setHighlightCategory(true);
       setTimeout(() => setHighlightCategory(false), 1500);
-
-      // Show notification
-      showNotification("New category added");
     }
   };
 
@@ -361,7 +513,7 @@ export default function AdminPage() {
   };
 
   // Handle the drag end event to reorder the sounds
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
@@ -371,19 +523,36 @@ export default function AdminPage() {
 
         const reorderedSounds = arrayMove(items, oldIndex, newIndex);
 
-        // Save the updated order to localStorage (only for custom sounds)
-        const builtInIds = new Set(builtInSoundEffects.map((s) => s.id));
-        const customSounds = reorderedSounds.filter((sound) => {
-          const builtInVersion = builtInSoundEffects.find(
-            (s) => s.id === sound.id
-          );
-          const isModified =
-            builtInVersion &&
-            JSON.stringify(builtInVersion) !== JSON.stringify(sound);
-          return isModified || !builtInIds.has(sound.id);
-        });
+        // Save the updated order asynchronously
+        const saveReorderedSounds = async () => {
+          setIsLoading(true);
+          
+          try {
+            // Get custom sounds to update
+            const builtInIds = new Set(builtInSoundEffects.map((s) => s.id));
+            const customSounds = reorderedSounds.filter((sound) => {
+              const builtInVersion = builtInSoundEffects.find(
+                (s) => s.id === sound.id
+              );
+              const isModified =
+                builtInVersion &&
+                JSON.stringify(builtInVersion) !== JSON.stringify(sound);
+              return isModified || !builtInIds.has(sound.id);
+            });
 
-        localStorage.setItem("soundEffects", JSON.stringify(customSounds));
+            // Save to Supabase
+            await saveSoundEffects(customSounds);
+
+            // Fallback: Save to localStorage
+            localStorage.setItem("soundEffects", JSON.stringify(customSounds));
+          } catch (error) {
+            console.error("Error saving reordered sounds:", error);
+          } finally {
+            setIsLoading(false);
+          }
+        };
+
+        saveReorderedSounds();
 
         return reorderedSounds;
       });
@@ -459,16 +628,66 @@ export default function AdminPage() {
     );
   }
 
-  const exportSoundEffects = () => {
-    // Get custom sounds from localStorage
-    const savedSounds = localStorage.getItem("soundEffects");
-    if (!savedSounds) {
-      showNotification("No custom sound effects to export");
-      return;
+  const exportSoundEffects = async () => {
+    setIsLoading(true);
+    
+    try {
+      // Get custom sounds from Supabase
+      const customSounds = await fetchSoundEffects();
+      
+      if (customSounds.length === 0) {
+        // Fallback to localStorage if no sounds in Supabase
+        const savedSounds = localStorage.getItem("soundEffects");
+        if (!savedSounds) {
+          showNotification("No custom sound effects to export");
+          return;
+        }
+        
+        // Create and download the file
+        downloadSoundsFile(savedSounds);
+      } else {
+        // Convert to serializable format
+        const serializableSounds = customSounds.map((sound) => {
+          const serializedSound = { ...sound };
+          
+          if (
+            sound.icon &&
+            sound.icon.type === "svg" &&
+            typeof sound.icon.content !== "string"
+          ) {
+            serializedSound.icon = {
+              ...sound.icon,
+              content: "DEFAULT_SVG",
+              type: "svg",
+            };
+          }
+          
+          return serializedSound;
+        });
+        
+        // Create and download the file
+        downloadSoundsFile(JSON.stringify(serializableSounds));
+      }
+    } catch (error) {
+      console.error("Error exporting sound effects:", error);
+      
+      // Fallback to localStorage if Supabase fails
+      const savedSounds = localStorage.getItem("soundEffects");
+      if (!savedSounds) {
+        showNotification("No custom sound effects to export");
+        return;
+      }
+      
+      // Create and download the file
+      downloadSoundsFile(savedSounds);
+    } finally {
+      setIsLoading(false);
     }
-
-    // Create a file to download
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(savedSounds);
+  };
+  
+  // Helper function to download sounds file
+  const downloadSoundsFile = (jsonContent: string) => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(jsonContent);
     const downloadAnchorNode = document.createElement('a');
     downloadAnchorNode.setAttribute("href", dataStr);
     downloadAnchorNode.setAttribute("download", "sound-effects-export.json");
@@ -479,7 +698,7 @@ export default function AdminPage() {
     showNotification("Sound effects exported successfully");
   };
 
-  const importSoundEffects = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const importSoundEffects = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const fileReader = new FileReader();
     const files = event.target.files;
     
@@ -488,11 +707,13 @@ export default function AdminPage() {
     }
     
     fileReader.readAsText(files[0], "UTF-8");
-    fileReader.onload = e => {
+    fileReader.onload = async (e) => {
       if (!e.target || typeof e.target.result !== 'string') {
         showNotification("Error reading file");
         return;
       }
+      
+      setIsLoading(true);
       
       try {
         const content = e.target.result;
@@ -503,7 +724,14 @@ export default function AdminPage() {
           throw new Error("Invalid format: expected an array");
         }
         
-        // Save to localStorage
+        // Save to Supabase
+        const success = await saveSoundEffects(importedSounds);
+        
+        if (!success) {
+          throw new Error("Failed to save to Supabase");
+        }
+        
+        // Save to localStorage as fallback
         localStorage.setItem("soundEffects", content);
         
         // Reload the sounds
@@ -522,10 +750,12 @@ export default function AdminPage() {
       } catch (error) {
         console.error("Import error:", error);
         showNotification("Error importing sound effects: Invalid file format");
+      } finally {
+        setIsLoading(false);
+        
+        // Clear the file input
+        event.target.value = '';
       }
-      
-      // Clear the file input
-      event.target.value = '';
     };
     
     fileReader.onerror = () => {
@@ -535,6 +765,13 @@ export default function AdminPage() {
 
   return (
     <div className="admin-page">
+      {/* Add loading indicator */}
+      {isLoading && (
+        <div className="loading-overlay">
+          <div className="loading-spinner"></div>
+        </div>
+      )}
+      
       <header className="admin-header">
         <Link href="/" className="back-link">
           <ArrowLeft size={18} /> Back to Sound Library
@@ -1116,6 +1353,32 @@ export default function AdminPage() {
           100% {
             box-shadow: 0 0 0 0 rgba(var(--highlight-rgb), 0);
           }
+        }
+
+        .loading-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.5);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 1000;
+        }
+        
+        .loading-spinner {
+          width: 50px;
+          height: 50px;
+          border: 5px solid var(--border-color);
+          border-top-color: var(--primary-color);
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </div>
